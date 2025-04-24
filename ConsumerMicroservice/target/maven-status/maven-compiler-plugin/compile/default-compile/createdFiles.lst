@@ -1,0 +1,3 @@
+com\example\ConsumerMicroservice\processor\InventoryUpdates.class
+com\example\ConsumerMicroservice\ConsumerMicroserviceApplication.class
+com\example\ConsumerMicroservice\processor\ProcessException.class
