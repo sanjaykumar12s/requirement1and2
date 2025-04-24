@@ -29,8 +29,6 @@ public class InventoryProcessingRoute extends RouteBuilder {
                 .split(simple("${exchangeProperty.inventoryList}")).streaming()
                 .doTry()
                 .bean("inventoryUpdates", "extractAndValidateStockFields")
-//                .setHeader("CamelMongoDbCriteria", simple("{ \"_id\": \"${exchangeProperty.itemId}\" }"))
-//                .to("mongodb:myDb?database=mycartdb&collection=item&operation=findOneByQuery")
                 .setBody( simple("${exchangeProperty.itemId}"))
                 .to("mongodb:myDb?database=mycartdb&collection=item&operation=findById")
                 .bean("inventoryUpdates", "computeUnifiedStock")
@@ -40,8 +38,6 @@ public class InventoryProcessingRoute extends RouteBuilder {
                 .bean("inventoryUpdates", "trackFailure")
                 .end()
                 .setProperty("errorList", constant(new ArrayList<>()))
-                .bean("inventoryUpdates", "saveFinalStatus")
-                .to("mongodb:myDb?database=mycartdb&collection=inventory_update_logs&operation=insert")
                 .log("Inventory processing completed: ${body}");
     }
 }

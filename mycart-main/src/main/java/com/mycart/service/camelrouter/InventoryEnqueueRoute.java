@@ -29,6 +29,6 @@ public class InventoryEnqueueRoute extends RouteBuilder {
         // Route: from seda to ActiveMQ
         from("seda:localInventoryBuffer?concurrentConsumers=5") // tune concurrency if needed
                 .log("Dequeued from Seda: ${body}")
-                .to("activemq:queue:processInventory"); // Step 2: durable queuing
+                .to("activemq:queue:processInventory?exchangePattern=InOnly&deliveryMode=2");
     }
 }

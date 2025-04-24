@@ -5,7 +5,6 @@ import org.bson.Document;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @Component("inventoryUpdates")
@@ -173,56 +172,5 @@ public class InventoryUpdates {
 
         exchange.getIn().setBody(item);
     }
-
-    public void trackSuccess(Exchange exchange) {
-        String itemId = exchange.getProperty("itemId", String.class);
-        List<Document> successList = exchange.getProperty("successList", List.class);
-
-        Document result = new Document();
-        result.put("itemId", itemId);
-        result.put("status", "success");
-        result.put("message", "Inventory updated successfully for item " + itemId);
-        successList.add(result);
-    }
-
-    public void trackFailure(Exchange exchange) {
-        String itemId = exchange.getProperty("itemId", String.class);
-        String errorMsg = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage();
-        List<Document> failureList = exchange.getProperty("failureList", List.class);
-
-        Document result = new Document();
-        result.put("itemId", itemId);
-        result.put("status", "failure");
-        result.put("error", errorMsg);
-        failureList.add(result);
-    }
-
-public void saveFinalStatus(Exchange exchange) {
-    String requestId = UUID.randomUUID().toString();
-    List<Document> successList = exchange.getProperty("successList", List.class);
-    List<Document> failureList = exchange.getProperty("failureList", List.class);
-
-    String status;
-    if (!successList.isEmpty() && !failureList.isEmpty()) {
-        status = "PARTIAL_SUCCESS";
-    } else if (!successList.isEmpty()) {
-        status = "SUCCESS";
-    } else {
-        status = "FAILED";
-    }
-
-    List<Document> allResults = new ArrayList<>();
-    allResults.addAll(successList);
-    allResults.addAll(failureList);
-
-    Document resultDoc = new Document();
-    resultDoc.put("_id", requestId);
-    resultDoc.put("status", status);
-    resultDoc.put("timestamp", LocalDateTime.now().toString());
-    resultDoc.put("results", allResults);
-
-    // Instead of sending to Mongo here, just set as body
-    exchange.getIn().setBody(resultDoc);
-}
 }
 
