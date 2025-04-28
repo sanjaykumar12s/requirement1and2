@@ -1,18 +1,16 @@
 package com.mycart.service.camelrouter;
 import com.mycart.service.dto.Response;
+import com.mycart.service.exception.ProcessException;
 import com.mycart.service.processors.*;
 import org.bson.BsonDocument;
-import org.bson.Document;
 import org.apache.camel.Exchange;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.model.dataformat.JsonLibrary;
 import org.apache.camel.model.rest.RestParamType;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+
 import java.util.*;
 
 

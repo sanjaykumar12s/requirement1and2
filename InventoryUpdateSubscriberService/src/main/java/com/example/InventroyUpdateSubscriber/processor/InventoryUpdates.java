@@ -1,5 +1,7 @@
-package com.mycart.service.processors;
-import com.mycart.service.exception.ProcessException;
+package com.example.InventroyUpdateSubscriber.processor;
+
+
+import com.example.InventroyUpdateSubscriber.exception.ProcessException;
 import org.apache.camel.Exchange;
 import org.bson.Document;
 import org.springframework.stereotype.Component;
@@ -25,7 +27,7 @@ public class InventoryUpdates {
         } else if (body instanceof Map) {
             return new Document((Map<String, Object>) body);
         } else {
-            throw new ProcessException( "You are updating a Invalid Item  " + (body != null ? body.getClass() : " It was not there in DB"));
+            throw new ProcessException("Unsupported body type: " + (body != null ? body.getClass() : "null"));
         }
     }
 
@@ -172,5 +174,27 @@ public class InventoryUpdates {
 
         exchange.getIn().setBody(item);
     }
-}
 
+    public void trackSuccess(Exchange exchange) {
+        String itemId = exchange.getProperty("itemId", String.class);
+        List<Document> successList = exchange.getProperty("successList", List.class);
+
+        Document result = new Document();
+        result.put("itemId", itemId);
+        result.put("status", "success");
+        result.put("message", "Inventory updated successfully for item " + itemId);
+        successList.add(result);
+    }
+
+    public void trackFailure(Exchange exchange) {
+        String itemId = exchange.getProperty("itemId", String.class);
+        String errorMsg = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage();
+        List<Document> failureList = exchange.getProperty("failureList", List.class);
+
+        Document result = new Document();
+        result.put("itemId", itemId);
+        result.put("status", "failure");
+        result.put("error", errorMsg);
+        failureList.add(result);
+    }
+}

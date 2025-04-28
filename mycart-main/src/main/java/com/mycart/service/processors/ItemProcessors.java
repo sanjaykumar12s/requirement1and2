@@ -1,8 +1,7 @@
 package com.mycart.service.processors;
 
-import com.mycart.service.camelrouter.ProcessException;
+import com.mycart.service.exception.ProcessException;
 import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
 import org.springframework.stereotype.Component;
 
 @Component
