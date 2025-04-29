@@ -4,22 +4,18 @@ import com.mycart.service.dto.Response;
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
 import org.bson.Document;
+import org.springframework.stereotype.Component;
 
 import java.util.*;
 
-public class CategoryProcessor implements Processor {
+@Component
+public class GetCategory {
 
-    @Override
+    // No @Override here, just a regular method
     public void process(Exchange exchange) throws Exception {
         try {
-            // Step 1: Validate categoryId
             String categoryId = exchange.getIn().getHeader("categoryId", String.class);
-            if (categoryId == null || categoryId.trim().isEmpty()) {
-                setError(exchange, 400, "Missing or empty categoryId in the request.");
-                return;
-            }
 
-            // Step 2: Validate includeSpecial (optional)
             String includeSpecial = exchange.getIn().getHeader("includeSpecial", String.class);
             if (includeSpecial != null) {
                 includeSpecial = includeSpecial.trim();
@@ -30,16 +26,14 @@ public class CategoryProcessor implements Processor {
                 }
             }
 
-            // Step 3: Build aggregation pipeline
             List<Document> pipeline = new ArrayList<>();
-            Document matchStage = new Document("categoryId", categoryId);
 
+            Document matchStage = new Document("categoryId", categoryId);
             if ("true".equalsIgnoreCase(includeSpecial)) {
                 matchStage.append("specialProduct", true);
             } else if ("false".equalsIgnoreCase(includeSpecial)) {
                 matchStage.append("specialProduct", false);
             }
-
             pipeline.add(new Document("$match", matchStage));
 
             pipeline.add(new Document("$lookup", new Document()
@@ -67,7 +61,6 @@ public class CategoryProcessor implements Processor {
                             .append("rating", "$rating")
                             .append("comment", "$comment")))));
 
-            // Step 4: Set aggregation pipeline as body
             exchange.getIn().setBody(pipeline);
 
         } catch (Exception e) {
@@ -78,8 +71,6 @@ public class CategoryProcessor implements Processor {
     private void setError(Exchange exchange, int statusCode, String message) {
         exchange.getIn().setBody(new Response(true, "Invalid request", message));
         exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, statusCode);
-        exchange.setProperty(Exchange.ROUTE_STOP, Boolean.TRUE); // ✔️ ensure route won't continue
+        exchange.setProperty(Exchange.ROUTE_STOP, Boolean.TRUE);
     }
-
 }
-

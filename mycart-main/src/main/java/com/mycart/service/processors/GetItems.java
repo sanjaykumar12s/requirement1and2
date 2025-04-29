@@ -5,7 +5,9 @@ import org.apache.camel.Exchange;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ItemProcessors {
+public class GetItems {
+
+    // Validates itemId in the request header
 
     public void validateItemId(Exchange exchange) {
         String itemId = (String) exchange.getIn().getHeader("itemId");
@@ -14,6 +16,8 @@ public class ItemProcessors {
         }
         exchange.getIn().setBody(itemId);
     }
+
+    // Throws exception if item is not found
 
     public void itemNotFound(Exchange exchange) {
         String itemId = (String) exchange.getIn().getHeader("itemId");

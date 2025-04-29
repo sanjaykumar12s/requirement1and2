@@ -1,4 +1,5 @@
 package com.mycart.service.processors;
+
 import com.mycart.service.exception.ProcessException;
 import org.apache.camel.Exchange;
 import org.bson.Document;
@@ -7,9 +8,10 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.util.*;
 
-@Component("inventoryUpdates")
+@Component
 public class InventoryUpdates {
 
+    // Safe parsing of integer values from stock details
     private int parseIntSafe(Object value) {
         try {
             return Integer.parseInt(value.toString());
@@ -18,6 +20,7 @@ public class InventoryUpdates {
         }
     }
 
+    // Extract Document from Exchange body (either from Map or Document)
     private Document getDocumentFromBody(Exchange exchange) {
         Object body = exchange.getIn().getBody();
         if (body instanceof Document) {
@@ -29,6 +32,7 @@ public class InventoryUpdates {
         }
     }
 
+    // Handle errors in inventory update process
     public void handleError(Exchange exchange) {
         ProcessException exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, ProcessException.class);
         List<Document> errorList = exchange.getProperty("errorList", List.class);
@@ -45,6 +49,7 @@ public class InventoryUpdates {
         exchange.setProperty("skipUpdate", true);
     }
 
+    // Prepare final response to be sent after processing inventory updates
     public void prepareFinalResponse(Exchange exchange) {
         List<Document> errors = exchange.getProperty("errorList", List.class);
         List<Document> successes = exchange.getProperty("successList", List.class);
@@ -68,6 +73,7 @@ public class InventoryUpdates {
         exchange.getIn().setHeader(Exchange.CONTENT_TYPE, "application/json");
     }
 
+    // Validate the incoming inventory request
     public void validateInventoryRequest(Exchange exchange) {
         Document body = getDocumentFromBody(exchange);
         if (!body.containsKey("items") || body.get("items") == null) {
@@ -91,6 +97,7 @@ public class InventoryUpdates {
         exchange.setProperty("failureList", new ArrayList<Document>());
     }
 
+    // Extract and validate stock fields for each inventory item
     public void extractAndValidateStockFields(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
         if (item == null || item.get("_id") == null || item.get("stockDetails") == null) {
@@ -109,6 +116,7 @@ public class InventoryUpdates {
         exchange.setProperty("damaged", damaged);
     }
 
+    // Flatten nested items if they exist in a list of lists format
     public void flattenItems(Exchange exchange) {
         Document body = getDocumentFromBody(exchange);
         Object rawItems = body.get("items");
@@ -131,6 +139,7 @@ public class InventoryUpdates {
         exchange.getIn().setBody(flatItemList);
     }
 
+    // Compute unified stock details for each item
     public void computeUnifiedStock(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
         if (item == null) throw new ProcessException("Item not found in DB.");
@@ -173,4 +182,3 @@ public class InventoryUpdates {
         exchange.getIn().setBody(item);
     }
 }
-

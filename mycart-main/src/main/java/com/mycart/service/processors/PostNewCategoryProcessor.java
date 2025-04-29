@@ -10,19 +10,19 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-@Component("postNewCategoryProcessor")
+@Component
 public class PostNewCategoryProcessor {
 
-    // Validate method (works directly with BsonDocument)
+    // Step 1: Validate incoming category request
     public void validate(Exchange exchange) {
-        // Get the category as a Map from the body of the exchange
+        // Extract request body as a Map
         Map<String, Object> categoryMap = exchange.getIn().getBody(Map.class);
 
-        // Convert the map to a BsonDocument
+        // Convert the map to a BSON document
         BsonDocument category = convertMapToBsonDocument(categoryMap);
         exchange.setProperty("category", category);
 
-        // Extract _id from BsonDocument
+        // Extract and validate _id
         String id = category.containsKey("_id") ? category.getString("_id").getValue().trim() : null;
         if (id == null || id.isEmpty()) {
             setError(exchange, 400, "Invalid Request", "_id is required and cannot be blank");
@@ -30,7 +30,7 @@ public class PostNewCategoryProcessor {
             return;
         }
 
-        // Extract categoryName from BsonDocument
+        // Extract and validate categoryName
         String name = category.containsKey("categoryName") ? category.getString("categoryName").getValue().trim() : null;
         if (name == null || name.isEmpty()) {
             setError(exchange, 400, "Invalid Request", "categoryName is required and cannot be blank");
@@ -38,41 +38,40 @@ public class PostNewCategoryProcessor {
             return;
         }
 
-        // Set the categoryId as a header for use in other routes
+        // Store the categoryId as a header for use later
         exchange.getIn().setHeader("categoryId", id);
     }
 
-    // Check for duplicate category (still using BsonDocument)
+    // Step 2: Check for existing category in MongoDB result
     public void checkDuplicate(Exchange exchange) {
-        // If the body of the exchange is not null, it means the category already exists
         if (exchange.getIn().getBody() != null) {
+            // If document already exists, reject with 400
             exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
             exchange.setProperty("stopProcessing", true);
             exchange.getIn().setBody(new Response(true, "Invalid Request", "Category already exists"));
         }
     }
 
-    // Insert success response
+    // Step 3: Build success response after successful MongoDB insert
     public void insertSuccess(Exchange exchange) {
-        // If the category is successfully inserted, set HTTP response code to 201 (Created)
         exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 201);
         exchange.getIn().setBody(new Response(false, "Success", "Category inserted successfully"));
     }
 
-    // Set error response
+    // Utility method: Set structured error response
     private void setError(Exchange exchange, int code, String title, String msg) {
-        // Set the error response and HTTP status code
         exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, code);
         exchange.getIn().setBody(new Response(true, title, msg));
     }
 
-    // Convert a Map<String, Object> to a BsonDocument
+    // Utility method: Convert input map into BSON document for MongoDB
     private BsonDocument convertMapToBsonDocument(Map<String, Object> map) {
         BsonDocument bsonDocument = new BsonDocument();
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
 
+            // Support basic types (String, Integer, Boolean); can be extended later
             if (value instanceof String) {
                 bsonDocument.append(key, new BsonString((String) value));
             } else if (value instanceof Integer) {

@@ -10,8 +10,6 @@ import lombok.Setter;
 
 public class Response {
     private boolean isError;
-
-    @Getter
     private String errorResponse;
 
     private String errMsg;
