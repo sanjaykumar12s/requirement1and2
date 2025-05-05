@@ -11,7 +11,7 @@ import java.util.*;
 @Component
 public class InventoryUpdates {
 
-    // Safe parsing of integer values from stock details
+    // Safely parse an object to integer, used for soldOut, damaged, availableStock
     private int parseIntSafe(Object value) {
         try {
             return Integer.parseInt(value.toString());
@@ -20,7 +20,7 @@ public class InventoryUpdates {
         }
     }
 
-    // Extract Document from Exchange body (either from Map or Document)
+    //  Convert incoming body into Document object (either from Map or Document)
     private Document getDocumentFromBody(Exchange exchange) {
         Object body = exchange.getIn().getBody();
         if (body instanceof Document) {
@@ -28,11 +28,11 @@ public class InventoryUpdates {
         } else if (body instanceof Map) {
             return new Document((Map<String, Object>) body);
         } else {
-            throw new ProcessException( "You are updating a Invalid Item  " + (body != null ? body.getClass() : " It was not there in DB"));
+            throw new ProcessException("You are updating a Invalid Item  " + (body != null ? body.getClass() : " It was not there in DB"));
         }
     }
 
-    // Handle errors in inventory update process
+    //  Handle custom errors during update and add them to errorList
     public void handleError(Exchange exchange) {
         ProcessException exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, ProcessException.class);
         List<Document> errorList = exchange.getProperty("errorList", List.class);
@@ -49,7 +49,7 @@ public class InventoryUpdates {
         exchange.setProperty("skipUpdate", true);
     }
 
-    // Prepare final response to be sent after processing inventory updates
+    //  Prepare a final success + error response to be returned after route is complete
     public void prepareFinalResponse(Exchange exchange) {
         List<Document> errors = exchange.getProperty("errorList", List.class);
         List<Document> successes = exchange.getProperty("successList", List.class);
@@ -59,6 +59,7 @@ public class InventoryUpdates {
         response.put("successfulUpdates", successes);
         response.put("errors", errors);
 
+        // Logging summary
         exchange.getContext().createProducerTemplate().sendBody("log:finalResponseLog?level=INFO",
                 "Inventory update details:\n" +
                         "Successful updates: " + successes.size() + "\n" +
@@ -66,14 +67,16 @@ public class InventoryUpdates {
                         "Successful Items: " + successes + "\n" +
                         "Error Items: " + errors);
 
+        // Log full response for debugging
         exchange.getContext().createProducerTemplate().sendBody("log:finalResponseLog?level=DEBUG", response);
 
+        // Set HTTP response
         exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, errors.isEmpty() ? 200 : 400);
         exchange.getIn().setBody(response);
         exchange.getIn().setHeader(Exchange.CONTENT_TYPE, "application/json");
     }
 
-    // Validate the incoming inventory request
+    //  Validate that the inventory input JSON contains a valid 'items' list
     public void validateInventoryRequest(Exchange exchange) {
         Document body = getDocumentFromBody(exchange);
         if (!body.containsKey("items") || body.get("items") == null) {
@@ -97,7 +100,7 @@ public class InventoryUpdates {
         exchange.setProperty("failureList", new ArrayList<Document>());
     }
 
-    // Extract and validate stock fields for each inventory item
+    //  Extract item ID, soldOut and damaged values from each item document
     public void extractAndValidateStockFields(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
         if (item == null || item.get("_id") == null || item.get("stockDetails") == null) {
@@ -116,7 +119,7 @@ public class InventoryUpdates {
         exchange.setProperty("damaged", damaged);
     }
 
-    // Flatten nested items if they exist in a list of lists format
+    //  Flatten items in case they are nested (list of lists structure)
     public void flattenItems(Exchange exchange) {
         Document body = getDocumentFromBody(exchange);
         Object rawItems = body.get("items");
@@ -139,7 +142,7 @@ public class InventoryUpdates {
         exchange.getIn().setBody(flatItemList);
     }
 
-    // Compute unified stock details for each item
+    //  Compute final availableStock and update lastUpdateDate
     public void computeUnifiedStock(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
         if (item == null) throw new ProcessException("Item not found in DB.");

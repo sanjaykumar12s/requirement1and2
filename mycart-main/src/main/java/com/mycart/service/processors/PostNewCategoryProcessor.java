@@ -13,7 +13,7 @@ import java.util.Map;
 @Component
 public class PostNewCategoryProcessor {
 
-    // Step 1: Validate incoming category request
+    //   Validate incoming category request
     public void validate(Exchange exchange) {
         // Extract request body as a Map
         Map<String, Object> categoryMap = exchange.getIn().getBody(Map.class);
@@ -42,7 +42,7 @@ public class PostNewCategoryProcessor {
         exchange.getIn().setHeader("categoryId", id);
     }
 
-    // Step 2: Check for existing category in MongoDB result
+    // Check for existing category in MongoDB result
     public void checkDuplicate(Exchange exchange) {
         if (exchange.getIn().getBody() != null) {
             // If document already exists, reject with 400
@@ -52,7 +52,7 @@ public class PostNewCategoryProcessor {
         }
     }
 
-    // Step 3: Build success response after successful MongoDB insert
+    //  Build success response after successful MongoDB insert
     public void insertSuccess(Exchange exchange) {
         exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 201);
         exchange.getIn().setBody(new Response(false, "Success", "Category inserted successfully"));

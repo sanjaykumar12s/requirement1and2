@@ -41,8 +41,5 @@ public class InventoryEnqueueRoute extends RouteBuilder {
                 .setBody(constant("Inventory update accepted for async processing"))
                 .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(202));
 
-
-
-
     }
 }

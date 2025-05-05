@@ -5,9 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-@Getter
-@Setter
-
 public class Response {
     private boolean isError;
     private String errorResponse;
@@ -46,6 +43,8 @@ public class Response {
     public void setErrMsg(String errMsg) {
         this.errMsg = errMsg;
     }
+
+
 
     @Override
     public String toString() {
