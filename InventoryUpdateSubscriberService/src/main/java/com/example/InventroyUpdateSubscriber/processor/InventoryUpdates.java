@@ -11,41 +11,41 @@ import java.util.*;
 @Component
 public class InventoryUpdates {
 
-    // Safely parse an integer from an object value
-    private int parseIntSafe(Object value) {
-        try {
-            return Integer.parseInt(value.toString());
-        } catch (Exception e) {
-            throw new ProcessException("Invalid number format in stock details");
-        }
-    }
+
 
     // Extract a Document from the body of the Exchange, either from a Map or Document
     private Document getDocumentFromBody(Exchange exchange) {
         Object body = exchange.getIn().getBody();
         if (body instanceof Document) {
+            // Return the body as a Document if it's already a Document type
             return (Document) body;
         } else if (body instanceof Map) {
+            // Convert the Map to a Document if it's of Map type
             return new Document((Map<String, Object>) body);
         } else {
+            // Throw an exception if the body is of an unsupported type
             throw new ProcessException("Unsupported body type: " + (body != null ? body.getClass() : "null"));
         }
     }
 
     // Handle any errors that occur during the inventory update process
     public void handleError(Exchange exchange) {
+        // Get the ProcessException thrown during the route processing
         ProcessException exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, ProcessException.class);
         List<Document> errorList = exchange.getProperty("errorList", List.class);
+
         if (errorList == null) {
             errorList = new ArrayList<>();
             exchange.setProperty("errorList", errorList);
         }
 
+        // Create an error Document and add it to the errorList
         Document error = new Document();
         error.put("itemId", exchange.getProperty("itemId"));
         error.put("message", exception.getMessage());
         errorList.add(error);
 
+        // Mark the update as skipped for this item
         exchange.setProperty("skipUpdate", true);
     }
 
@@ -59,6 +59,7 @@ public class InventoryUpdates {
         response.put("successfulUpdates", successes);
         response.put("errors", errors);
 
+        // Log success and error details
         exchange.getContext().createProducerTemplate().sendBody("log:finalResponseLog?level=INFO",
                 "Inventory update details:\n" +
                         "Successful updates: " + successes.size() + "\n" +
@@ -68,6 +69,7 @@ public class InventoryUpdates {
 
         exchange.getContext().createProducerTemplate().sendBody("log:finalResponseLog?level=DEBUG", response);
 
+        // Set the HTTP response code based on errors and successes
         exchange.getMessage().setHeader(Exchange.HTTP_RESPONSE_CODE, errors.isEmpty() ? 200 : 400);
         exchange.getIn().setBody(response);
         exchange.getIn().setHeader(Exchange.CONTENT_TYPE, "application/json");
@@ -76,6 +78,8 @@ public class InventoryUpdates {
     // Validate the incoming inventory request, ensuring the presence of 'items' field
     public void validateInventoryRequest(Exchange exchange) {
         Document body = getDocumentFromBody(exchange);
+
+        // Check if the 'items' field exists and is not null
         if (!body.containsKey("items") || body.get("items") == null) {
             throw new ProcessException("Invalid inventory format: 'items' field is missing or empty.");
         }
@@ -91,6 +95,7 @@ public class InventoryUpdates {
             throw new ProcessException("Invalid inventory format: 'items' list is empty or invalid.");
         }
 
+        // Store the items in the exchange properties for later use
         exchange.setProperty("inventoryList", items);
         exchange.setProperty("errorList", new ArrayList<Document>());
         exchange.setProperty("successList", new ArrayList<Document>());
@@ -100,6 +105,8 @@ public class InventoryUpdates {
     // Extract and validate the stock fields for each inventory item
     public void extractAndValidateStockFields(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
+
+        // Check if the item ID and stock details are available in the item document
         if (item == null || item.get("_id") == null || item.get("stockDetails") == null) {
             throw new ProcessException("Item ID or stock details are missing.");
         }
@@ -108,49 +115,26 @@ public class InventoryUpdates {
         Object stockDetailsObj = item.get("stockDetails");
         Document stock = stockDetailsObj instanceof Document ? (Document) stockDetailsObj : new Document((Map<String, Object>) stockDetailsObj);
 
-        int soldOut = parseIntSafe(stock.get("soldOut"));
-        int damaged = parseIntSafe(stock.get("damaged"));
+        // Parse sold-out and damaged quantities
+        int soldOut = (int) stock.get("soldOut");
+        int damaged = (int) stock.get("damaged");
 
+        // Store these values in the exchange properties for later use
         exchange.setProperty("itemId", id);
         exchange.setProperty("soldOut", soldOut);
         exchange.setProperty("damaged", damaged);
     }
 
-    // Flatten any nested lists of items into a single list
-    public void flattenItems(Exchange exchange) {
-        Document body = getDocumentFromBody(exchange);
-        Object rawItems = body.get("items");
-        List<Document> flatItemList = new ArrayList<>();
-
-        if (rawItems instanceof List<?>) {
-            for (Object group : (List<?>) rawItems) {
-                if (group instanceof List<?>) {
-                    for (Object item : (List<?>) group) {
-                        if (item instanceof Map) {
-                            flatItemList.add(new Document((Map<String, Object>) item));
-                        }
-                    }
-                } else if (group instanceof Map) {
-                    flatItemList.add(new Document((Map<String, Object>) group));
-                }
-            }
-        }
-
-        exchange.getIn().setBody(flatItemList);
-    }
-
     // Compute unified stock values for inventory items, considering sold out and damaged items
     public void computeUnifiedStock(Exchange exchange) {
         Document item = getDocumentFromBody(exchange);
-        if (item == null) throw new ProcessException("Item not found in DB.");
-
         Object stockDetailsObj = item.get("stockDetails");
         Document stockDetails = stockDetailsObj instanceof Document ? (Document) stockDetailsObj : new Document((Map<String, Object>) stockDetailsObj);
         if (stockDetails == null) throw new ProcessException("Stock details are missing for item");
 
-        int availableStock = parseIntSafe(stockDetails.get("availableStock"));
-        int existingSoldOut = parseIntSafe(stockDetails.get("soldOut"));
-        int existingDamaged = parseIntSafe(stockDetails.get("damaged"));
+        int availableStock = (int) stockDetails.get("availableStock");
+        int existingSoldOut = (int) stockDetails.get("soldOut");
+        int existingDamaged = (int) stockDetails.get("damaged");
 
         int soldOut = exchange.getProperty("soldOut", Integer.class);
         int damaged = exchange.getProperty("damaged", Integer.class);
@@ -180,30 +164,5 @@ public class InventoryUpdates {
         successList.add(successItem);
 
         exchange.getIn().setBody(item);
-    }
-
-    // Track successful inventory updates for items
-    public void trackSuccess(Exchange exchange) {
-        String itemId = exchange.getProperty("itemId", String.class);
-        List<Document> successList = exchange.getProperty("successList", List.class);
-
-        Document result = new Document();
-        result.put("itemId", itemId);
-        result.put("status", "success");
-        result.put("message", "Inventory updated successfully for item " + itemId);
-        successList.add(result);
-    }
-
-    // Track failed inventory updates for items
-    public void trackFailure(Exchange exchange) {
-        String itemId = exchange.getProperty("itemId", String.class);
-        String errorMsg = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class).getMessage();
-        List<Document> failureList = exchange.getProperty("failureList", List.class);
-
-        Document result = new Document();
-        result.put("itemId", itemId);
-        result.put("status", "failure");
-        result.put("error", errorMsg);
-        failureList.add(result);
     }
 }

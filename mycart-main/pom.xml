@@ -51,6 +51,12 @@
 			<artifactId>camel-spring-boot-starter</artifactId>
 			<version>${camel.version}</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.hibernate/hibernate-validator -->
+		<dependency>
+			<groupId>org.hibernate</groupId>
+			<artifactId>hibernate-validator</artifactId>
+			<version>9.0.0.Beta3</version>
+		</dependency>
 		<!-- Use Servlet component instead of Restlet -->
 		<dependency>
 			<groupId>org.apache.camel.springboot</groupId>
@@ -70,9 +76,6 @@
 			<artifactId>camel-mongodb-starter</artifactId>
 			<version>${camel.version}</version>
 		</dependency>
-
-
-
 
 		<!-- ActiveMQ Classic for Camel -->
 		<dependency>
@@ -120,9 +123,6 @@
 			<artifactId>camel-file-starter</artifactId>
 			<version>${camel.version}</version>
 		</dependency>
-
-
-
 
 
 

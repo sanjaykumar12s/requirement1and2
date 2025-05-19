@@ -11,11 +11,11 @@ import org.springframework.stereotype.Component;
 public class GlobalExceptionHandler extends RouteBuilder {
     @Override
     public void configure() {
-        onException(Exception.class)
-                .handled(true)
-                .log("Exception: ${exception.message}")
-                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(500))
-                .setBody(simple("Internal server error: ${exception.message}"));
+//        onException(Exception.class)
+//                .handled(true)
+//                .log("Exception: ${exception.message}")
+//                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(500))
+//                .setBody(simple("Internal server error: ${exception.message}"));
 
 
         onException(MongoException.class)
@@ -33,5 +33,7 @@ public class GlobalExceptionHandler extends RouteBuilder {
 
                     exchange.getIn().setBody(errorResponse);
                 });
+
+
     }
 }

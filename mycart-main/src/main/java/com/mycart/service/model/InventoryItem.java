@@ -2,7 +2,7 @@ package com.mycart.service.model;
 
 public class InventoryItem {
 
-    private String id;  // Changed to `id` for consistency
+    private String id;
     private StockDetails stockDetails;
 
     // Getters and Setters

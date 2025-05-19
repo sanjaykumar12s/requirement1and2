@@ -1,12 +1,10 @@
 package com.mycart.service.camelrouter;
 import com.mycart.service.dto.Response;
 import com.mycart.service.exception.ProcessException;
-import com.mycart.service.processors.*;
-import org.bson.BsonDocument;
+import com.mycart.service.model.Category;
 import org.apache.camel.Exchange;
 import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.model.rest.RestParamType;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +14,6 @@ import java.util.*;
 
 @Component
 public class ItemRoute extends RouteBuilder {
-    private static final Logger logger = LoggerFactory.getLogger(ItemRoute.class);
 
     @Override
     public void configure() throws ProcessException {
@@ -27,12 +24,10 @@ public class ItemRoute extends RouteBuilder {
                 .setHeader(Exchange.CONTENT_TYPE, constant("application/json"))
                 .process(exchange -> {
                     Exception exception = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
-
                     Response errorResponse = new Response();
                     errorResponse.setError(true);
                     errorResponse.setErrorResponse("Invalid Request");
                     errorResponse.setErrMsg(exception.getMessage());
-
                     exchange.getIn().setBody(errorResponse); // Will be auto-serialized to JSON by Camel
                 });
 //------------------------------------------------------------------
@@ -40,31 +35,43 @@ public class ItemRoute extends RouteBuilder {
 
         //  Define REST endpoint to fetch item by ID
         rest("/mycart/item/{itemId}")
-                .get()
-                .to("direct:getItemById");
+                   .get()
+//                .to("direct:getItemById");
+                   .to("direct:getItemWithCategoryName");
 
-        from("direct:getItemById")
 
-                //  Log the incoming request
-                .log("Fetching item with ID: ${header.itemId}")
+        from("direct:getItemWithCategoryName")
+                .routeId("getItemWithCategoryNameRoute")
 
-                //  Validate the itemId
+                // Validate itemId from header and set as body for Mongo query
                 .bean("getItems", "validateItemId")
 
-                //  Query MongoDB for the item by ID
-                .to("mongodb:mycartdb?database=mycartdb&collection=item&operation=findById")
+                // Fetch item by _id (itemId)
+                .to("mongodb:myDb?database=mycartdb&collection=item&operation=findById")
 
-                //  Check if item was found
                 .choice()
-                //  If not found, handle item not found
                 .when(body().isNull())
                 .bean("getItems", "itemNotFound")
+                .end()
 
-                //  If found, log and return it
-                .otherwise()
-                .log("Item found: ${body}")
-                .setHeader(Exchange.HTTP_RESPONSE_CODE, constant(200))
-                .end();
+                // Extract categoryId and store item and categoryId in exchange properties
+                .process(exchange -> {
+                    org.bson.Document item = exchange.getIn().getBody(org.bson.Document.class);
+                    String categoryId = item.getString("categoryId");
+                    exchange.setProperty("item", item);
+                    exchange.setProperty("categoryId", categoryId);
+                })
+
+                // Query category by _id = categoryId
+                .setBody(simple("${exchangeProperty.categoryId}"))
+                .to("mongodb:myDb?database=mycartdb&collection=category&operation=findById")
+
+                // Use bean method to enrich item with categoryName replacing categoryId and reorder fields
+                .bean("getItems", "enrichItemWithCategoryName")
+
+                .log("Final item with categoryName: ${body}");
+
+
 
 
         //-------------------------------------------------------------
@@ -72,34 +79,12 @@ public class ItemRoute extends RouteBuilder {
         // Define REST endpoint for GET /category/{categoryId}
         rest("/category/{categoryId}")
                 .get()
-                .param()
-                .name("includeSpecial").type(RestParamType.query) // Optional query param
-                .description("Include special items").dataType("boolean").defaultValue("")
-                .endParam()
                 .to("direct:getItemsByCategory");
 
         // Define internal route to handle fetching category-based items
         from("direct:getItemsByCategory")
-
-                //  Extract and validate categoryId from request header
-                .process(exchange -> {
-                    String categoryId = exchange.getIn().getHeader("categoryId", String.class);
-                    if (categoryId == null || categoryId.trim().isEmpty()) {
-                        // If categoryId is missing, return error response
-                        exchange.getIn().setBody(new com.mycart.service.dto.Response(true, "Invalid request", "Missing categoryId in the request URL."));
-                        exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
-                        exchange.setProperty(Exchange.ROUTE_STOP, true); // Flag route to stop
-                    } else {
-                        // Set categoryId as body for the next Mongo query
-                        exchange.getIn().setBody(categoryId);
-                    }
-                })
-
-                //  Stop route early if validation failed
-                .choice()
-                .when(exchangeProperty(Exchange.ROUTE_STOP).isEqualTo(true))
-                .log("Route stopped early due to validation error")
-                .otherwise()
+                .routeId("getItemsByCategory")
+                .setBody(simple("${header.categoryId}"))
 
                 //  Fetch category document from MongoDB by ID
                 .to("mongodb:mycartdb?database=mycartdb&collection=category&operation=findById")
@@ -109,7 +94,7 @@ public class ItemRoute extends RouteBuilder {
                 .when(body().isNull())
                 // Category not found, return error
                 .process(exchange -> {
-                    exchange.getIn().setBody(new com.mycart.service.dto.Response(true, "Invalid request", "Invalid categoryId"));
+                    exchange.getIn().setBody(new Response(true, "Invalid request", "Invalid categoryId"));
                     exchange.getIn().setHeader(Exchange.HTTP_RESPONSE_CODE, 400);
                     exchange.setProperty(Exchange.ROUTE_STOP, true);
                 })
@@ -150,11 +135,10 @@ public class ItemRoute extends RouteBuilder {
         // REST endpoint to POST new items
         rest("/items")
                 .post()
-                .consumes("application/json")
                 .to("direct:postNewItem");
 
         from("direct:postNewItem")
-
+                .routeId("postNewItem")
                 //  Validate input JSON and extract important fields
                 .bean("postNewItemProcessor", "validate")
 
@@ -184,7 +168,8 @@ public class ItemRoute extends RouteBuilder {
                 .when(body().isNotNull())
                 .setProperty("isUpdate", constant(true)) // Mark as update
                 .setBody(exchangeProperty("item"))
-                .setHeader("lastUpdateDate", simple("${bean:postNewItemProcessor.getCurrentDateTime}"))
+                .bean("postNewItemProcessor", "updateTimestamp")
+
                 .to("mongodb:mycartdb?database=mycartdb&collection=item&operation=save")
                 .bean("postNewItemProcessor", "respondInsertOrUpdate")
 
@@ -192,7 +177,7 @@ public class ItemRoute extends RouteBuilder {
                 .otherwise()
                 .setProperty("isUpdate", constant(false)) // Mark as insert
                 .setBody(exchangeProperty("item"))
-                .setHeader("lastUpdateDate", simple("${bean:postNewItemProcessor.getCurrentDateTime}"))
+                .bean("postNewItemProcessor", "updateTimestamp")
                 .to("mongodb:mycartdb?database=mycartdb&collection=item&operation=insert")
                 .bean("postNewItemProcessor", "respondInsertOrUpdate")
                 .end();
@@ -202,53 +187,44 @@ public class ItemRoute extends RouteBuilder {
         // 3. POST new category (API Endpoint Definition)
         rest("/category")
                 .post() // Define HTTP POST method for /category endpoint
-                .consumes("application/json") // Expecting JSON input
                 .to("direct:postNewCategory"); // Route request to direct:postNewCategory
 
         from("direct:postNewCategory")
+                .routeId("postNewCategory")
                 .log("Received new category: ${body}")
 
-                //  Validate the category data using the postNewCategoryProcessor bean
                 .bean("postNewCategoryProcessor", "validate")
-
-                // Conditional check to stop processing if validation fails
-                .choice()
-                .when(exchangeProperty("stopProcessing").isEqualTo(true)) // Check if stopProcessing is set to true (validation error)
+                .choice().when(exchangeProperty("stopProcessing").isEqualTo(true))
                 .stop()
                 .end()
 
-                //  Query MongoDB to check if the category already exists using categoryId header
-                .setBody(simple("${header.categoryId}")) // Set the body to categoryId header
-                .to("mongodb:mycartdb?database=mycartdb&collection=category&operation=findById") // MongoDB query to check if category exists
+                // Check if category with same ID exists
+                .setBody(simple("${header.categoryId}"))
+                .to("mongodb:mycartdb?database=mycartdb&collection=category&operation=findById")
 
-                //  Check for category duplication using the postNewCategoryProcessor bean
-                .bean("postNewCategoryProcessor", "checkDuplicate") // Calls checkDuplicate method in the processor
+                .bean("postNewCategoryProcessor", "checkDuplicate")
+                .choice().when(exchangeProperty("stopProcessing").isEqualTo(true)).stop().end()
 
-                // Conditional check to stop processing if the category already exists
-                .choice()
-                .when(exchangeProperty("stopProcessing").isEqualTo(true)) // Check if stopProcessing is set to true (duplicate category)
-                .stop()
-                .end()
-
-                //  Set the category data in the exchange body and insert it into MongoDB
+                // Insert the category
                 .process(exchange -> {
-                    // Get the category from the property and set it as the body of the exchange
-                    BsonDocument category = exchange.getProperty("category", BsonDocument.class);
+                    Map<String, String> category = exchange.getProperty("category", Map.class);
                     exchange.getIn().setBody(category);
                 })
-                .to("mongodb:mycartdb?database=mycartdb&collection=category&operation=insert") // Insert the category into MongoDB
 
-                //  Respond with success message after insertion
-                .bean("postNewCategoryProcessor", "insertSuccess"); // Calls insertSuccess method in the processor to generate the response
+                .to("mongodb:mycartdb?database=mycartdb&collection=category&operation=insert")
+
+                .bean("postNewCategoryProcessor", "insertSuccess");
+
 
         //-----------------------------------------------------------------------------------------
         // Update stock / products count
+
         rest("/inventory/update")
                 .post()
                 .to("direct:updateInventory");
 
         from("direct:updateInventory")
-
+                .routeId("updateInventory")
                 //  Handle exceptions using custom error processor
                 .onException(ProcessException.class)
                 .handled(true)
@@ -287,6 +263,5 @@ public class ItemRoute extends RouteBuilder {
 
                 //  Prepare final aggregated response after processing all items
                 .bean("inventoryUpdates", "prepareFinalResponse");
-
     }
-}
+    }
